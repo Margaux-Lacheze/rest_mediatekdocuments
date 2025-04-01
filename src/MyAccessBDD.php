@@ -52,6 +52,10 @@ class MyAccessBDD extends AccessBDD {
                 return $this->selectCommandesLivreDvd($champs);
             case "commandes" :
                 return $this->selectAllCommandes();
+            case "abonnement" :
+                return $this->selectAbonnementsRevue($champs);
+            case "expiration" :
+                return $this->selectRevueExpirationMois();
             default:
                 // cas général
                 return $this->selectTuplesOneTable($table, $champs);
@@ -69,6 +73,8 @@ class MyAccessBDD extends AccessBDD {
         switch ($table) {
             case "commandedocument" :
                 return $this->insertCommandeDocument($champs);
+            case "abonnement" :
+                return $this->insertAbonnement($champs);
             default:
                 // cas général
                 return $this->insertOneTupleOneTable($table, $champs);
@@ -369,5 +375,69 @@ class MyAccessBDD extends AccessBDD {
 
         $requete = "CALL updateCommandeDocument(:id, :dateCommande, :nbExemplaire, :montant, :idSuivi)";
         return $this->conn->updateBDD($requete, $champsAUtiliser);
+    }
+    
+    /**
+     * Sélectionne tous les abonnements de la revue dont l'id est passée en paramètre
+     * @param array|null $champs
+     * @return array|null
+     */
+    private function selectAbonnementsRevue(?array $champs) : ?array {
+        if(empty($champs)) {
+            return null;
+        }
+        if (!array_key_exists('id', $champs)) {
+            return null;
+        }
+        $champNecessaire['idRevue'] = $champs['id'];
+        $requete = "SELECT c.id, c.dateCommande, c.montant, a.dateFinAbonnement, a.idRevue ";
+        $requete .= "FROM commande c JOIN abonnement a ";
+        $requete .= "ON c.id = a.id ";
+        $requete .= "WHERE a.idRevue = :idRevue ";
+        $requete .= "ORDER BY c.dateCommande DESC";
+        return $this->conn->queryBDD($requete, $champNecessaire);
+    }
+    
+    /**
+     * Insertion d'une commande de revue dans les tables commande et abonnement
+     * @param array|null $champs
+     * @return int|null
+     */
+    private function insertAbonnement(?array $champs): ?int {
+        if (empty($champs)){
+            return null;
+        }
+        
+        $champsNecessaires = ['Id', 'DateCommande', 'Montant', 'DateFinAbonnement', 'IdRevue'];
+        foreach ($champsNecessaires as $champ) {
+            if (!array_key_exists($champ, $champs)) {
+                return null;
+            }
+        }
+        
+        $champsAUtiliser = [
+            'id' => $champs['Id'],
+            'dateCommande' => $champs['DateCommande'],
+            'montant' => $champs['Montant'],
+            'dateFinAbonnement' => $champs['DateFinAbonnement'],
+            'idRevue' => $champs['IdRevue']
+        ];
+        $requete = "CALL insertAbonnement(:id, :dateCommande, :montant, :dateFinAbonnement, :idRevue)";
+        return $this->conn->updateBDD($requete, $champsAUtiliser);
+    }
+    
+    /**
+     * Retourne la liste des revues dont les abonnements seront expirés dans 30 jours
+     * @return array|null
+     */
+    private function selectRevueExpirationMois(): ?array
+    {
+        $requete = "SELECT titre, abonnement.dateFinAbonnement FROM document ";
+        $requete .= "JOIN abonnement ON document.id = abonnement.idRevue ";
+        $requete .= "JOIN commande ON commande.id = abonnement.id  ";
+        $requete .= "WHERE abonnement.dateFinAbonnement BETWEEN NOW() AND DATE_ADD(NOW(), INTERVAL 30 DAY) ";
+        $requete .= "ORDER BY abonnement.dateFinAbonnement ASC";
+        
+        return $this->conn->queryBDD($requete);
     }
 }
